@@ -3,7 +3,7 @@
 	import GlobalSettings from './GlobalSettings.svelte';
 	import RentScenarioForm from './RentScenarioForm.svelte';
 	import BuyScenarioForm from './BuyScenarioForm.svelte';
-	import type { RentScenario, BuyScenario } from '$lib/types';
+	import type { RentScenario, BuyScenario, Scenario } from '$lib/types';
 
 	let expandedIds: Set<string> = $state(new Set(appState.scenarios.map((s) => s.id)));
 
@@ -14,6 +14,53 @@
 			expandedIds.add(id);
 		}
 		expandedIds = new Set(expandedIds);
+	}
+
+	const nok = (v: number) =>
+		new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 }).format(v);
+
+	function calcMonthlyCost(scenario: Scenario): { housing: number; total: number; label: string } {
+		if (scenario.type === 'rent') {
+			const s = scenario as RentScenario;
+			return {
+				housing: s.monthlyRent,
+				total: s.monthlyRent + s.investment.monthlyContribution,
+				label: 'Husleie + investering'
+			};
+		}
+
+		const s = scenario as BuyScenario;
+		const principal = Math.max(0, s.listingPrice - s.downPayment);
+		const r = s.interestRate / 12;
+		const n = s.loanTermYears * 12;
+
+		let mortgagePayment = 0;
+		if (principal > 0 && n > 0) {
+			if (s.loanType === 'annuity') {
+				mortgagePayment = r === 0 ? principal / n : (principal * r) / (1 - Math.pow(1 + r, -n));
+			} else {
+				// Serial: first month payment
+				mortgagePayment = principal / n + principal * r;
+			}
+		}
+		mortgagePayment += s.extraMonthlyPayment;
+
+		// Tax saving on first month's interest
+		const firstInterest = principal * r;
+		const fellesgjeldInterest = s.fellesgjeld > 0 ? (s.fellesgjeld * s.fellesgjeldInterestRate) / 12 : 0;
+		const taxSaving = (firstInterest + fellesgjeldInterest) * 0.22;
+
+		const maintenance = (s.listingPrice * s.annualMaintenancePct) / 12;
+		const insurance = s.annualInsuranceNOK / 12;
+
+		const housing = mortgagePayment + s.felleskostnaderMonthly + maintenance + insurance - taxSaving;
+		const total = housing + s.investment.monthlyContribution;
+
+		return {
+			housing,
+			total,
+			label: s.loanType === 'serial' ? 'Første mnd (synkende)' : 'Fast per mnd'
+		};
 	}
 </script>
 
@@ -30,20 +77,35 @@
 
 	<div class="scenario-list">
 		{#each appState.scenarios as scenario (scenario.id)}
+			{@const monthly = calcMonthlyCost(scenario)}
 			<div class="scenario-card">
 				<div class="scenario-header" onclick={() => toggleExpanded(scenario.id)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && toggleExpanded(scenario.id)}>
 					<div class="scenario-title">
 						<span class="color-dot" style="background:{scenario.color}"></span>
-						<span class="scenario-type-badge" class:rent={scenario.type === 'rent'} class:buy={scenario.type === 'buy'}>
-							{scenario.type === 'rent' ? 'LEIE' : 'KJØPE'}
-						</span>
-						<input
-							class="name-input"
-							type="text"
-							value={scenario.name}
-							onclick={(e) => e.stopPropagation()}
-							oninput={(e) => { scenario.name = (e.target as HTMLInputElement).value; }}
-						/>
+						<div class="title-stack">
+							<div class="title-row">
+								<span class="scenario-type-badge" class:rent={scenario.type === 'rent'} class:buy={scenario.type === 'buy'}>
+									{scenario.type === 'rent' ? 'LEIE' : 'KJØPE'}
+								</span>
+								<input
+									class="name-input"
+									type="text"
+									value={scenario.name}
+									onclick={(e) => e.stopPropagation()}
+									oninput={(e) => { scenario.name = (e.target as HTMLInputElement).value; }}
+								/>
+							</div>
+							<div class="monthly-row">
+								<span class="monthly-amount">{nok(monthly.housing)}</span>
+								<span class="monthly-sep">/mnd</span>
+								{#if scenario.investment.monthlyContribution > 0}
+									<span class="monthly-invest">+ {nok(scenario.investment.monthlyContribution)} invest.</span>
+								{/if}
+								{#if scenario.type === 'buy' && (scenario as BuyScenario).loanType === 'serial'}
+									<span class="monthly-note">↓</span>
+								{/if}
+							</div>
+						</div>
 					</div>
 					<div class="scenario-actions">
 						<button class="icon-btn" title="Dupliser" onclick={(e) => { e.stopPropagation(); duplicateScenario(scenario.id); }}>⧉</button>
@@ -152,6 +214,20 @@
 		width: 8px;
 	}
 
+	.title-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.title-row {
+		align-items: center;
+		display: flex;
+		gap: 6px;
+	}
+
 	.scenario-type-badge {
 		border-radius: 2px;
 		font-size: 9px;
@@ -188,10 +264,38 @@
 		padding: 0 4px;
 	}
 
+	.monthly-row {
+		align-items: baseline;
+		display: flex;
+		gap: 4px;
+	}
+
+	.monthly-amount {
+		color: var(--text);
+		font-size: 13px;
+	}
+
+	.monthly-sep {
+		color: var(--text-dim);
+		font-size: 10px;
+	}
+
+	.monthly-invest {
+		color: var(--text-dim);
+		font-size: 10px;
+	}
+
+	.monthly-note {
+		color: var(--text-dim);
+		font-size: 10px;
+		title: 'Serielån: synkende terminbeløp';
+	}
+
 	.scenario-actions {
 		align-items: center;
 		display: flex;
 		gap: 4px;
+		flex-shrink: 0;
 	}
 
 	.icon-btn {
