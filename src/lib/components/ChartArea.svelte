@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { createChart, ColorType, LineStyle } from 'lightweight-charts';
+	import { createChart, ColorType, LineStyle, LineSeries } from 'lightweight-charts';
 	import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 	import type { ScenarioResult, YearlyDataPoint } from '$lib/types';
 	import BreakdownPanel from './BreakdownPanel.svelte';
@@ -101,7 +101,7 @@
 			let series = seriesMap.get(id);
 
 			if (!series) {
-				series = chart.addLineSeries({
+				series = chart.addSeries(LineSeries, {
 					color,
 					lineWidth: 2,
 					crosshairMarkerVisible: true,
