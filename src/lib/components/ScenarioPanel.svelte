@@ -96,11 +96,8 @@
 								/>
 							</div>
 							<div class="monthly-row">
-								<span class="monthly-amount">{nok(monthly.housing)}</span>
+								<span class="monthly-amount">{nok(monthly.total)}</span>
 								<span class="monthly-sep">/mnd</span>
-								{#if scenario.investment.monthlyContribution > 0}
-									<span class="monthly-invest">+ {nok(scenario.investment.monthlyContribution)} invest.</span>
-								{/if}
 								{#if scenario.type === 'buy' && (scenario as BuyScenario).loanType === 'serial'}
 									<span class="monthly-note">↓</span>
 								{/if}
