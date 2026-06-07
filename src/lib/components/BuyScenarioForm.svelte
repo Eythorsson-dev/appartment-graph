@@ -6,6 +6,30 @@
 	interface Props { scenario: BuyScenario; }
 	let { scenario }: Props = $props();
 
+	const nok = (v: number) =>
+		new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 }).format(v);
+
+	const monthlyPayment = $derived.by(() => {
+		const principal = Math.max(0, scenario.listingPrice - scenario.downPayment);
+		const r = scenario.interestRate / 12;
+		const n = scenario.loanTermYears * 12;
+		if (principal <= 0 || n <= 0) return null;
+
+		if (scenario.loanType === 'annuity') {
+			const payment = r === 0 ? principal / n : (principal * r) / (1 - Math.pow(1 + r, -n));
+			return { type: 'annuity', fixed: payment + scenario.extraMonthlyPayment };
+		} else {
+			const principalPart = principal / n;
+			const firstInterest = principal * r;
+			const lastInterest = principalPart * r;
+			return {
+				type: 'serial',
+				first: principalPart + firstInterest + scenario.extraMonthlyPayment,
+				last: principalPart + lastInterest + scenario.extraMonthlyPayment
+			};
+		}
+	});
+
 	let showFellesgjeld = $state(false);
 	$effect.pre(() => {
 		showFellesgjeld = scenario.fellesgjeld > 0 || scenario.propertyType === 'borettslag';
@@ -177,6 +201,22 @@
 		</div>
 	</div>
 
+	{#if monthlyPayment}
+		<div class="payment-summary">
+			{#if monthlyPayment.type === 'annuity'}
+				<span class="payment-label">Månedlig terminbeløp</span>
+				<span class="payment-value">{nok(monthlyPayment.fixed)}</span>
+			{:else}
+				<span class="payment-label">Månedlig terminbeløp</span>
+				<div class="payment-range">
+					<span class="payment-value">{nok(monthlyPayment.first)}</span>
+					<span class="payment-arrow">→</span>
+					<span class="payment-value payment-last">{nok(monthlyPayment.last)}</span>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<!-- Advanced costs -->
 	<button class="advanced-toggle" onclick={() => (showAdvanced = !showAdvanced)}>
 		{showAdvanced ? '▾' : '▸'} Avanserte kostnader
@@ -279,5 +319,45 @@
 
 	.advanced-toggle:hover {
 		color: var(--text-muted);
+	}
+
+	.payment-summary {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-left: 2px solid var(--accent-amber);
+		border-radius: var(--radius);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 7px 10px;
+	}
+
+	.payment-label {
+		color: var(--text-dim);
+		font-size: 10px;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	.payment-range {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.payment-value {
+		color: var(--accent-amber);
+		font-size: 12px;
+	}
+
+	.payment-last {
+		color: var(--text-muted);
+	}
+
+	.payment-arrow {
+		color: var(--text-dim);
+		font-size: 10px;
 	}
 </style>
