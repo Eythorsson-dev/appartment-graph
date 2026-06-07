@@ -11,42 +11,63 @@
 
 	let { id, value, isPercent = false, min, max, step, onchange }: Props = $props();
 
-	const displayMin = $derived(isPercent && min !== undefined ? min * 100 : min);
-	const displayMax = $derived(isPercent && max !== undefined ? max * 100 : max);
-	const displayStep = $derived(isPercent && step !== undefined ? step * 100 : step);
+	let focused = $state(false);
 
-	function toDisplay(v: number): string {
+	function formatDisplay(v: number): string {
+		if (isPercent) return (v * 100).toFixed(2);
+		return new Intl.NumberFormat('nb-NO').format(Math.round(v));
+	}
+
+	function formatEdit(v: number): string {
 		if (isPercent) return (v * 100).toFixed(2);
 		return String(Math.round(v));
 	}
 
-	function fromDisplay(raw: string): number {
-		const n = parseFloat(raw);
+	function parse(raw: string): number {
+		// Strip Norwegian thousand-separator spaces before parsing
+		const cleaned = raw.replace(/\s/g, '').replace(',', '.');
+		const n = parseFloat(cleaned);
 		if (isNaN(n)) return value;
 		return isPercent ? n / 100 : n;
 	}
 
-	let displayValue = $state(toDisplay(value));
+	let inputEl: HTMLInputElement;
+
+	function handleFocus() {
+		focused = true;
+		// Switch to raw editable value
+		inputEl.value = formatEdit(value);
+		inputEl.select();
+	}
+
+	function handleBlur(e: FocusEvent) {
+		focused = false;
+		const v = parse((e.target as HTMLInputElement).value);
+		onchange(v);
+		inputEl.value = formatDisplay(v);
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+	}
 
 	$effect(() => {
-		displayValue = toDisplay(value);
+		if (!focused && inputEl) {
+			inputEl.value = formatDisplay(value);
+		}
 	});
-
-	function handleChange(e: Event) {
-		const v = fromDisplay((e.target as HTMLInputElement).value);
-		onchange(v);
-	}
 </script>
 
 <div class="field">
 	<input
 		{id}
-		type="number"
-		value={displayValue}
-		min={displayMin}
-		max={displayMax}
-		step={displayStep}
-		onchange={handleChange}
+		bind:this={inputEl}
+		type="text"
+		inputmode="decimal"
+		value={formatDisplay(value)}
+		onfocus={handleFocus}
+		onblur={handleBlur}
+		onkeydown={handleKeydown}
 	/>
 	{#if isPercent}
 		<span class="unit">%</span>
